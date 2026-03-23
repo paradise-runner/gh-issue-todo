@@ -5,7 +5,7 @@ A [GitHub CLI](https://cli.github.com/) extension that syncs a `TODO.md` file wi
 ## Install
 
 ```sh
-gh extension install edwardchampion/gh-issue-todo
+gh extension install paradise-runner/gh-issue-todo
 ```
 
 Or from a local clone:
