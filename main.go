@@ -69,8 +69,13 @@ func run(todoFile string, dryRun bool) error {
 
 	fmt.Fprintf(os.Stderr, "syncing %s → %s/%s\n", todoFile, repo.Owner, repo.Name)
 
+	cache, err := todo.FetchIssueCache(context.Background(), client, repo)
+	if err != nil {
+		return fmt.Errorf("fetching issues: %w", err)
+	}
+
 	items := todo.ParseLines(lines)
-	results := todo.Run(context.Background(), items, client, repo, dryRun, todoFile)
+	results := todo.Run(context.Background(), items, client, repo, cache, dryRun, todoFile)
 
 	// Print results in original line order and apply updates to the lines slice.
 	changed := false
