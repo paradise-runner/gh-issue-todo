@@ -5,22 +5,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net/url"
-	"strings"
 
 	"github.com/cli/go-gh/v2/pkg/api"
 	"github.com/cli/go-gh/v2/pkg/repository"
 )
 
-// searchResponse is the shape returned by GET /search/issues.
-type searchResponse struct {
-	Items []struct {
-		Number int    `json:"number"`
-		Title  string `json:"title"`
-	} `json:"items"`
-}
-
-// issueResponse is used for GET /repos/{owner}/{repo}/issues/{n}.
+// issueResponse is used for POST /repos/{owner}/{repo}/issues.
 type issueResponse struct {
 	Number int    `json:"number"`
 	State  string `json:"state"` // "open" or "closed"
@@ -32,23 +22,6 @@ func jsonBody(v any) (*bytes.Reader, error) {
 		return nil, err
 	}
 	return bytes.NewReader(b), nil
-}
-
-// findOpenIssue searches for an open issue with exactly this title.
-// Returns (issueNumber, found, error).
-func findOpenIssue(ctx context.Context, client *api.RESTClient, repo repository.Repository, title string) (int, bool, error) {
-	q := url.QueryEscape(`"`+title+`"`) + fmt.Sprintf("+in:title+repo:%s/%s+is:open+is:issue", repo.Owner, repo.Name)
-	var resp searchResponse
-	if err := client.DoWithContext(ctx, "GET", "search/issues?q="+q, nil, &resp); err != nil {
-		return 0, false, err
-	}
-	// Filter client-side for exact match — GitHub search is fuzzy even with quotes.
-	for _, item := range resp.Items {
-		if strings.EqualFold(item.Title, title) {
-			return item.Number, true, nil
-		}
-	}
-	return 0, false, nil
 }
 
 // createIssue creates a new issue and returns its number.
@@ -66,16 +39,6 @@ func createIssue(ctx context.Context, client *api.RESTClient, repo repository.Re
 		return 0, err
 	}
 	return resp.Number, nil
-}
-
-// getIssueState returns "open" or "closed" for issue number n.
-func getIssueState(ctx context.Context, client *api.RESTClient, repo repository.Repository, n int) (string, error) {
-	var resp issueResponse
-	path := fmt.Sprintf("repos/%s/%s/issues/%d", repo.Owner, repo.Name, n)
-	if err := client.DoWithContext(ctx, "GET", path, nil, &resp); err != nil {
-		return "", err
-	}
-	return resp.State, nil
 }
 
 // closeIssue closes issue number n.
@@ -150,11 +113,7 @@ func ProcessItem(ctx context.Context, client *api.RESTClient, repo repository.Re
 		return base
 
 	case ActionCloseByTitle:
-		n, found, err := findOpenIssue(ctx, client, repo, item.Task)
-		if err != nil {
-			base.Err = fmt.Errorf("search %q: %w", item.Task, err)
-			return base
-		}
+		n, found := cache.NumberByTitle(item.Task)
 		if !found {
 			base.Verb = "skip"
 			base.Detail = fmt.Sprintf("no open issue found for: %s", item.Task)

@@ -182,3 +182,70 @@ func TestProcessItem_CreateIssue_DryRun(t *testing.T) {
 		t.Errorf("Verb = %q; want would-create", result.Verb)
 	}
 }
+
+func TestProcessItem_CloseByTitle_Found(t *testing.T) {
+	cache := NewIssueCache()
+	cache.Add(8, "Remove deprecated API", "open")
+
+	patchCalled := false
+	client := mockClient(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "PATCH" && strings.Contains(r.URL.Path, "/issues/8") {
+			patchCalled = true
+			w.WriteHeader(http.StatusOK)
+			fmt.Fprint(w, `{"number":8,"state":"closed"}`)
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	})
+
+	item := Item{
+		LineIndex: 0, Raw: "- [x] Remove deprecated API", Action: ActionCloseByTitle,
+		Prefix: "- [x] ", Task: "Remove deprecated API",
+	}
+
+	result := ProcessItem(context.Background(), client, testRepo, item, cache, false, "TODO.md")
+
+	if result.Verb != "closed" {
+		t.Errorf("Verb = %q; want closed", result.Verb)
+	}
+	if result.IssueNum != 8 {
+		t.Errorf("IssueNum = %d; want 8", result.IssueNum)
+	}
+	if !patchCalled {
+		t.Error("expected PATCH /issues/8 to be called")
+	}
+}
+
+func TestProcessItem_CloseByTitle_NotFound(t *testing.T) {
+	cache := NewIssueCache() // no matching issue
+
+	item := Item{
+		LineIndex: 0, Raw: "- [x] Remove deprecated API", Action: ActionCloseByTitle,
+		Prefix: "- [x] ", Task: "Remove deprecated API",
+	}
+
+	result := ProcessItem(context.Background(), nil, testRepo, item, cache, false, "TODO.md")
+
+	if result.Verb != "skip" {
+		t.Errorf("Verb = %q; want skip", result.Verb)
+	}
+}
+
+func TestProcessItem_CloseByTitle_DryRun(t *testing.T) {
+	cache := NewIssueCache()
+	cache.Add(8, "Remove deprecated API", "open")
+
+	item := Item{
+		LineIndex: 0, Raw: "- [x] Remove deprecated API", Action: ActionCloseByTitle,
+		Prefix: "- [x] ", Task: "Remove deprecated API",
+	}
+
+	result := ProcessItem(context.Background(), nil, testRepo, item, cache, true, "TODO.md")
+
+	if result.Verb != "would-close" {
+		t.Errorf("Verb = %q; want would-close", result.Verb)
+	}
+	if result.IssueNum != 8 {
+		t.Errorf("IssueNum = %d; want 8", result.IssueNum)
+	}
+}
