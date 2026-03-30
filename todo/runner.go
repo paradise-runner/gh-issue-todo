@@ -16,7 +16,7 @@ const MaxConcurrency = 5
 // results in the same order as items. Errors from individual items are stored
 // in Result.Err rather than aborting the group — a 404 on one item should not
 // prevent the other 14 from being processed.
-func Run(ctx context.Context, items []Item, client *api.RESTClient, repo repository.Repository, dryRun bool, todoFile string) []Result {
+func Run(ctx context.Context, items []Item, client *api.RESTClient, repo repository.Repository, cache *IssueCache, dryRun bool, todoFile string) []Result {
 	results := make([]Result, len(items))
 
 	g, ctx := errgroup.WithContext(ctx)
@@ -26,7 +26,7 @@ func Run(ctx context.Context, items []Item, client *api.RESTClient, repo reposit
 		item := item // capture loop variable
 		g.Go(func() error {
 			// Each goroutine writes to its own disjoint index — no mutex needed.
-			results[item.LineIndex] = ProcessItem(ctx, client, repo, item, nil, dryRun, todoFile)
+			results[item.LineIndex] = ProcessItem(ctx, client, repo, item, cache, dryRun, todoFile)
 			return nil // never propagate errors to the group
 		})
 	}
