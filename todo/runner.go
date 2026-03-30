@@ -26,7 +26,7 @@ func Run(ctx context.Context, items []Item, client *api.RESTClient, repo reposit
 		item := item // capture loop variable
 		g.Go(func() error {
 			// Each goroutine writes to its own disjoint index — no mutex needed.
-			results[item.LineIndex] = ProcessItem(ctx, client, repo, item, dryRun, todoFile)
+			results[item.LineIndex] = ProcessItem(ctx, client, repo, item, nil, dryRun, todoFile)
 			return nil // never propagate errors to the group
 		})
 	}

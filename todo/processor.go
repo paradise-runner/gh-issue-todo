@@ -90,7 +90,7 @@ func closeIssue(ctx context.Context, client *api.RESTClient, repo repository.Rep
 
 // ProcessItem runs the full lifecycle for one Item and returns a Result.
 // Errors are stored in Result.Err rather than returned directly.
-func ProcessItem(ctx context.Context, client *api.RESTClient, repo repository.Repository, item Item, dryRun bool, todoFile string) Result {
+func ProcessItem(ctx context.Context, client *api.RESTClient, repo repository.Repository, item Item, cache *IssueCache, dryRun bool, todoFile string) Result {
 	base := Result{LineIndex: item.LineIndex, NewLine: item.Raw, Task: item.Task, IssueNum: item.IssueNum}
 
 	switch item.Action {
@@ -134,12 +134,8 @@ func ProcessItem(ctx context.Context, client *api.RESTClient, repo repository.Re
 		return base
 
 	case ActionCloseByNum:
-		state, err := getIssueState(ctx, client, repo, item.IssueNum)
-		if err != nil {
-			base.Err = fmt.Errorf("view #%d: %w", item.IssueNum, err)
-			return base
-		}
-		if state != "open" {
+		state, found := cache.StateByNumber(item.IssueNum)
+		if !found || state != "open" {
 			base.Verb = "skip"
 			base.Detail = fmt.Sprintf("#%d already closed", item.IssueNum)
 			return base
