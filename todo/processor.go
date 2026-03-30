@@ -103,12 +103,7 @@ func ProcessItem(ctx context.Context, client *api.RESTClient, repo repository.Re
 		return base
 
 	case ActionCreateIssue:
-		n, found, err := findOpenIssue(ctx, client, repo, item.Task)
-		if err != nil {
-			base.Err = fmt.Errorf("search %q: %w", item.Task, err)
-			return base
-		}
-		if found {
+		if n, found := cache.NumberByTitle(item.Task); found {
 			base.IssueNum = n
 			base.NewLine = fmt.Sprintf("%s%s (#%d)", item.Prefix, item.Task, n)
 			base.Changed = base.NewLine != item.Raw
@@ -121,11 +116,12 @@ func ProcessItem(ctx context.Context, client *api.RESTClient, repo repository.Re
 			base.Detail = item.Task
 			return base
 		}
-		n, err = createIssue(ctx, client, repo, item.Task, todoFile)
+		n, err := createIssue(ctx, client, repo, item.Task, todoFile)
 		if err != nil {
 			base.Err = fmt.Errorf("create %q: %w", item.Task, err)
 			return base
 		}
+		cache.Add(n, item.Task, "open")
 		base.IssueNum = n
 		base.NewLine = fmt.Sprintf("%s%s (#%d)", item.Prefix, item.Task, n)
 		base.Changed = true

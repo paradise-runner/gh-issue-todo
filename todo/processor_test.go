@@ -108,3 +108,77 @@ func TestProcessItem_CloseByNum_DryRun(t *testing.T) {
 		t.Errorf("Verb = %q; want would-close", result.Verb)
 	}
 }
+
+func TestProcessItem_CreateIssue_AlreadyExists(t *testing.T) {
+	cache := NewIssueCache()
+	cache.Add(10, "Add dark mode", "open")
+
+	item := Item{
+		LineIndex: 1, Raw: "- [ ] Add dark mode", Action: ActionCreateIssue,
+		Prefix: "- [ ] ", Task: "Add dark mode",
+	}
+
+	result := ProcessItem(context.Background(), nil, testRepo, item, cache, false, "TODO.md")
+
+	if result.Verb != "skip" {
+		t.Errorf("Verb = %q; want skip", result.Verb)
+	}
+	if result.IssueNum != 10 {
+		t.Errorf("IssueNum = %d; want 10", result.IssueNum)
+	}
+	want := "- [ ] Add dark mode (#10)"
+	if result.NewLine != want {
+		t.Errorf("NewLine = %q; want %q", result.NewLine, want)
+	}
+}
+
+func TestProcessItem_CreateIssue_CreatesNew(t *testing.T) {
+	cache := NewIssueCache() // no existing issue
+
+	postCalled := false
+	client := mockClient(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "POST" && strings.Contains(r.URL.Path, "/issues") {
+			postCalled = true
+			w.WriteHeader(http.StatusCreated)
+			fmt.Fprint(w, `{"number":42,"state":"open"}`)
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	})
+
+	item := Item{
+		LineIndex: 2, Raw: "- [ ] Add dark mode", Action: ActionCreateIssue,
+		Prefix: "- [ ] ", Task: "Add dark mode",
+	}
+
+	result := ProcessItem(context.Background(), client, testRepo, item, cache, false, "TODO.md")
+
+	if result.Verb != "created" {
+		t.Errorf("Verb = %q; want created", result.Verb)
+	}
+	if result.IssueNum != 42 {
+		t.Errorf("IssueNum = %d; want 42", result.IssueNum)
+	}
+	if !postCalled {
+		t.Error("expected POST /issues to be called")
+	}
+	// After creation, issue should be in cache
+	if _, found := cache.NumberByTitle("add dark mode"); !found {
+		t.Error("newly created issue should be added to cache")
+	}
+}
+
+func TestProcessItem_CreateIssue_DryRun(t *testing.T) {
+	cache := NewIssueCache()
+
+	item := Item{
+		LineIndex: 3, Raw: "- [ ] Add dark mode", Action: ActionCreateIssue,
+		Prefix: "- [ ] ", Task: "Add dark mode",
+	}
+
+	result := ProcessItem(context.Background(), nil, testRepo, item, cache, true, "TODO.md")
+
+	if result.Verb != "would-create" {
+		t.Errorf("Verb = %q; want would-create", result.Verb)
+	}
+}
